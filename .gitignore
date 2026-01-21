@@ -1,0 +1,24 @@
+__pycache__/
+.env
+config.yaml
+*.jpg
+.venv/
+venv/
+*.log
+*.pid
+*.pkl
+*.egg-info
+
+.pytest_cache/
+
+logs/
+
+.DS_Store
+
+# model
+models/
+
+# data for vector database
+resources/docs/
+resources/test_docs/
+resources/vector/
