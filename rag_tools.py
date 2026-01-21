@@ -125,14 +125,24 @@ def convert_command(directory: str = None, force: bool = False, force_ocr: bool 
     
     rag = RAGManager(rag_directory=rag_dir)
     
-    # 检查MinerU是否可用
+    # 检查PDF处理器是否可用
+    engine = (rag.pdf_processor_engine or "").lower()
+    engine_label = engine or "unknown"
     if not rag.pdf_processor:
-        print("❌ MinerU PDF处理器不可用！")
-        print("   请确保已安装: pip install 'mineru[core]'")
-        print(f"   模型目录: {config.MINERU_MODEL_DIR}")
+        print(f"❌ PDF处理器不可用！(engine={engine_label})")
+        if engine == "mineru":
+            print("   请确保已安装: pip install 'mineru[core]'")
+            print(f"   模型目录: {config.MINERU_MODEL_DIR}")
+        elif engine == "markitdown":
+            print("   请确保已安装: pip install markitdown")
+        elif engine in ("qwen-vl", "qwen_vl"):
+            print("   请确保已安装: pip install pymupdf transformers torch qwen-vl-utils")
+            print(f"   模型目录: {config.QWEN_VL_MODEL_DIR}")
+        else:
+            print("   请确认相关依赖已安装并正确配置。")
         return 1
     
-    print("✓ MinerU PDF处理器已就绪\n")
+    print(f"✓ PDF处理器已就绪 (engine={engine_label})\n")
     
     # 扫描目录
     print("🔍 正在扫描目录...")
