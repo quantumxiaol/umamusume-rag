@@ -31,6 +31,22 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 uv sync
 ```
 
+可选依赖（按需安装）：
+
+```bash
+# PDF/文档解析能力（MarkItDown/Docling/MinerU/Qwen-VL）
+uv sync --extra etl
+
+# 开发与测试工具
+uv sync --extra dev
+
+# 全功能开发环境
+uv sync --extra all
+
+# 如修改了 pyproject.toml 的依赖，建议更新锁文件
+uv lock
+```
+
 ### 配置
 
 ```bash

@@ -59,7 +59,9 @@ python tests/test_2_rag_mcp.py \
 python tests/pdf_to_md_mineru.py --pdf /path/to/file.pdf
 python tests/pdf_to_md_markitdown.py --pdf /path/to/file.pdf
 python tests/pdf_to_md_qwen_vl.py --pdf /path/to/file.pdf --max-pages 3
+python tests/pdf_to_md_docling.py --pdf /path/to/file.pdf
 ```
 
 说明：
 - Qwen2.5-VL PDF 测试依赖 `pymupdf`，并需要先下载 Qwen2.5-VL 权重到 `models/`。
+- Docling PDF 测试可选设置 `DOCLING_ARTIFACTS_PATH` 指向已下载的 Docling 模型目录。
