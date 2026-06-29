@@ -81,8 +81,8 @@ class RAGManager:
     def _load_config(self) -> Dict[str, Any]:
         """加载配置"""
         return {
-            'chunk_size': int(os.getenv('CHUNK_SIZE', '500')),
-            'chunk_overlap': int(os.getenv('CHUNK_OVERLAP', '100')),
+            'chunk_size': int(os.getenv('CHUNK_SIZE', '2000')),
+            'chunk_overlap': int(os.getenv('CHUNK_OVERLAP', '200')),
             'hf_embedding_model': os.getenv('HF_EMBEDDING_MODEL', 'Qwen/Qwen3-Embedding-0.6B'),
             'device': os.getenv('EMBEDDING_DEVICE', 'cpu')
         }

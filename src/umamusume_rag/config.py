@@ -32,8 +32,8 @@ class Config:
     # ================== RAG Settings ==================
     HF_EMBEDDING_MODEL: str = os.getenv("HF_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B")
     HF_Embedding_Model: str = HF_EMBEDDING_MODEL  # Backward-compatible alias.
-    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
-    CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "100"))
+    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "2000"))
+    CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "200"))
     
     # Embedding设备：cpu, cuda, mps
     EMBEDDING_DEVICE: str = os.getenv("EMBEDDING_DEVICE", "cpu")
