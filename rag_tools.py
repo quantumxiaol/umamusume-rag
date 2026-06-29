@@ -4,11 +4,13 @@ RAG工具脚本 - 用于管理RAG数据库和PDF转换
 """
 
 import argparse
+import json
 import sys
 import time
 import os
 from pathlib import Path
 import logging
+from datetime import datetime, timezone
 
 # 添加项目路径到sys.path
 project_root = Path(__file__).parent
@@ -138,6 +140,8 @@ def convert_command(directory: str = None, force: bool = False, force_ocr: bool 
         elif engine in ("qwen-vl", "qwen_vl"):
             print("   请确保已安装: pip install pymupdf transformers torch qwen-vl-utils")
             print(f"   模型目录: {config.QWEN_VL_MODEL_DIR}")
+        elif engine in ("", "none", "off", "disabled", "false"):
+            print("   PDF处理已禁用。请设置 PDF_PROCESSOR_ENGINE=markitdown/mineru/docling/qwen-vl 后重试。")
         else:
             print("   请确认相关依赖已安装并正确配置。")
         return 1
@@ -278,6 +282,97 @@ def build_command(directory: str = None, force_convert: bool = False, force_rebu
         return 1
 
 
+def _vectorstore_documents(vectorstore) -> list:
+    docstore = getattr(vectorstore, "docstore", None)
+    docstore_dict = getattr(docstore, "_dict", None)
+    if isinstance(docstore_dict, dict):
+        return list(docstore_dict.values())
+    return []
+
+
+def export_faiss_command(
+    directory: str = None,
+    output: str = "resources/faiss",
+    force_rebuild: bool = False,
+):
+    """导出可移植的 LangChain FAISS 索引目录。"""
+    rag_dir = directory or config.RAG_DIRECTORY
+    out_dir = Path(output)
+    if not out_dir.is_absolute():
+        out_dir = project_root / out_dir
+    index_dir = out_dir / "faiss_index"
+
+    print(f"📁 使用目录: {rag_dir}")
+    print(f"📦 导出目录: {out_dir}\n")
+
+    rag = RAGManager(rag_directory=rag_dir)
+    export_start = time.time()
+
+    try:
+        if force_rebuild:
+            rag.initialize(force_rebuild=True)
+        elif not rag.load_cache():
+            print(f"❌ 导出失败: 无法加载向量数据库缓存: {rag.cache_file}")
+            print("   请先运行: python rag_tools.py build --force-rebuild")
+            print("   或显式允许导出前重建: python rag_tools.py export-faiss --force-rebuild")
+            return 1
+
+        if rag.vectorstore is None:
+            print("❌ 导出失败: 向量数据库未初始化")
+            return 1
+
+        index_dir.mkdir(parents=True, exist_ok=True)
+        rag.vectorstore.save_local(str(index_dir))
+
+        documents = _vectorstore_documents(rag.vectorstore)
+        sources = sorted(
+            {
+                str(doc.metadata.get("source"))
+                for doc in documents
+                if getattr(doc, "metadata", None) and doc.metadata.get("source")
+            }
+        )
+        manifest = {
+            "index_format": "langchain-faiss-save-local",
+            "embedding_model": rag.config["hf_embedding_model"],
+            "embedding_device_at_export": rag.config["device"],
+            "embedding_normalize": True,
+            "chunk_size": rag.config["chunk_size"],
+            "chunk_overlap": rag.config["chunk_overlap"],
+            "rag_directory": str(rag.rag_directory),
+            "cache_file": str(rag.cache_file),
+            "chunk_count": len(documents),
+            "source_count": len(sources),
+            "sources": sources,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "files": {
+                "faiss_index": "faiss_index/index.faiss",
+                "docstore": "faiss_index/index.pkl",
+                "manifest": "manifest.json",
+            },
+        }
+        manifest_path = out_dir / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        elapsed = time.time() - export_start
+        print("✅ FAISS 索引导出完成")
+        print(f"  index.faiss: {index_dir / 'index.faiss'}")
+        print(f"  index.pkl:   {index_dir / 'index.pkl'}")
+        print(f"  manifest:    {manifest_path}")
+        print(f"  chunks:      {len(documents)}")
+        print(f"  sources:     {len(sources)}")
+        print(f"  耗时:        {format_time(elapsed)}")
+        print("\n上传 HF Dataset 时上传导出目录内的 faiss_index/ 和 manifest.json。")
+        return 0
+    except Exception as e:
+        logger.error(f"导出FAISS索引失败: {e}", exc_info=True)
+        print(f"\n❌ 导出失败: {e}")
+        return 1
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
@@ -287,25 +382,45 @@ def main():
 示例:
   # 扫描目录
   python rag_tools.py scan
-  
+
   # 转换所有未转换的PDF
   python rag_tools.py convert
-  
+
   # 强制重新转换所有PDF
   python rag_tools.py convert --force
-  
+
   # 构建RAG数据库
   python rag_tools.py build
-  
+
   # 强制重新转换PDF并重建数据库
   python rag_tools.py build --force-convert --force-rebuild
+
+  # 导出可上传到 Hugging Face Dataset 的 FAISS 索引
+  python rag_tools.py export-faiss --output resources/faiss
+  python rag_tools.py --export-faiss --output resources/faiss
 
   # 转换指定PDF（保持同目录同名）
   python rag_tools.py convert-file --file /path/to/file.pdf
   python rag_tools.py convert-file --file /path/to/file.pdf --force-ocr
         """
     )
-    
+    parser.add_argument(
+        '--export-faiss',
+        action='store_true',
+        help='导出可上传到 Hugging Face Dataset 的 FAISS 索引'
+    )
+    parser.add_argument(
+        '--output',
+        type=str,
+        default="resources/faiss",
+        help='--export-faiss 的输出目录（默认：resources/faiss）'
+    )
+    parser.add_argument(
+        '--force-rebuild',
+        action='store_true',
+        help='配合 --export-faiss 使用，导出前强制重建向量数据库'
+    )
+
     subparsers = parser.add_subparsers(dest='command', help='可用命令')
     
     # scan命令
@@ -373,9 +488,35 @@ def main():
         action='store_true',
         help='强制重新构建向量数据库（不使用缓存）'
     )
-    
+
+    # export-faiss命令
+    export_parser = subparsers.add_parser(
+        'export-faiss',
+        help='导出可上传到 Hugging Face Dataset 的 FAISS 索引'
+    )
+    export_parser.add_argument(
+        '--directory', '-d',
+        type=str,
+        default=None,
+        help=f'文档目录（默认：{config.RAG_DIRECTORY}）'
+    )
+    export_parser.add_argument(
+        '--output', '-o',
+        type=str,
+        default="resources/faiss",
+        help='输出目录（默认：resources/faiss）'
+    )
+    export_parser.add_argument(
+        '--force-rebuild',
+        action='store_true',
+        help='导出前强制重新构建向量数据库'
+    )
+
     args = parser.parse_args()
-    
+
+    if args.export_faiss:
+        return export_faiss_command(output=args.output, force_rebuild=args.force_rebuild)
+
     if not args.command:
         parser.print_help()
         return 1
@@ -402,6 +543,8 @@ def main():
             return 1
         elif args.command == 'build':
             return build_command(args.directory, args.force_convert, args.force_rebuild)
+        elif args.command == 'export-faiss':
+            return export_faiss_command(args.directory, args.output, args.force_rebuild)
         else:
             parser.print_help()
             return 1

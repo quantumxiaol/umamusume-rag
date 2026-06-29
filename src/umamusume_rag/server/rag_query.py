@@ -6,12 +6,11 @@ from __future__ import annotations
 
 import argparse
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from ..config import config
@@ -80,10 +79,18 @@ def _build_prompt() -> ChatPromptTemplate:
     )
 
 
-def _build_llm() -> ChatOpenAI:
+def _build_llm() -> Any:
+    try:
+        from langchain_openai import ChatOpenAI
+    except ImportError as exc:
+        raise RuntimeError(
+            "LLM dependencies are not installed. Run: uv sync --extra llm"
+        ) from exc
+
+    config.validate_llm()
     return ChatOpenAI(
         model_name=config.INFO_LLM_MODEL_NAME,
-        api_key=config.INFO_LLM_MODEL_API_KEY or config.DASHSCOPE_API_KEY,
+        api_key=config.INFO_LLM_MODEL_API_KEY,
         base_url=config.INFO_LLM_MODEL_BASE_URL,
     )
 
@@ -134,14 +141,12 @@ def _build_context(
 
 
 def create_app() -> FastAPI:
-    config.validate()
     app = FastAPI(
         title="RAG Service",
         description="基于本地知识库的检索增强问答服务",
         version="2.1.0",
     )
 
-    llm = _build_llm()
     prompt_template = _build_prompt()
 
     @app.on_event("startup")
@@ -191,6 +196,10 @@ def create_app() -> FastAPI:
             )
 
         try:
+            llm = getattr(app.state, "llm", None)
+            if llm is None:
+                llm = _build_llm()
+                app.state.llm = llm
             messages = prompt_template.format_messages(
                 context=context_text, question=request.question
             )

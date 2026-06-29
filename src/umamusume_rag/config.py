@@ -28,10 +28,10 @@ class Config:
     INFO_LLM_MODEL_NAME: str = os.getenv("INFO_LLM_MODEL_NAME", "qwen-max-latest")
     INFO_LLM_MODEL_BASE_URL: str = os.getenv("INFO_LLM_MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
     INFO_LLM_MODEL_API_KEY: str = os.getenv("INFO_LLM_MODEL_API_KEY", "")
-    DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY", INFO_LLM_MODEL_API_KEY)  # 兼容旧变量
 
     # ================== RAG Settings ==================
-    HF_Embedding_Model: str = os.getenv("HF_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B")
+    HF_EMBEDDING_MODEL: str = os.getenv("HF_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B")
+    HF_Embedding_Model: str = HF_EMBEDDING_MODEL  # Backward-compatible alias.
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "100"))
     
@@ -55,11 +55,11 @@ class Config:
         (PROJECT_ROOT / _mineru_model_dir.lstrip("./")).resolve()
     )
 
-    # 默认PDF处理引擎（mineru/markitdown）
-    PDF_PROCESSOR_ENGINE: str = os.getenv("PDF_PROCESSOR_ENGINE", "mineru")
+    # PDF处理引擎（none/markitdown/mineru/docling/qwen-vl）
+    PDF_PROCESSOR_ENGINE: str = os.getenv("PDF_PROCESSOR_ENGINE", "none")
     
     # 是否自动将PDF转换为Markdown
-    AUTO_CONVERT_PDF_TO_MD: bool = os.getenv("AUTO_CONVERT_PDF_TO_MD", "true").lower() == "true"
+    AUTO_CONVERT_PDF_TO_MD: bool = os.getenv("AUTO_CONVERT_PDF_TO_MD", "false").lower() == "true"
     
     # 是否优先使用Markdown文件（如果存在对应的MD文件，跳过PDF）
     PREFER_MARKDOWN_FILES: bool = os.getenv("PREFER_MARKDOWN_FILES", "true").lower() == "true"
@@ -79,15 +79,22 @@ class Config:
     QWEN_VL_MAX_TOKENS: int = int(os.getenv("QWEN_VL_MAX_TOKENS", "2048"))
 
     @classmethod
-    def validate(cls):
+    def validate_llm(cls):
         """
-        验证必要配置是否已设置
+        验证LLM问答所需配置是否已设置。
         """
         missing = []
-        if not cls.INFO_LLM_MODEL_API_KEY and not cls.DASHSCOPE_API_KEY:
-            missing.append("INFO_LLM_MODEL_API_KEY or DASHSCOPE_API_KEY")
+        if not cls.INFO_LLM_MODEL_API_KEY:
+            missing.append("INFO_LLM_MODEL_API_KEY")
         if missing:
             raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
+
+    @classmethod
+    def validate(cls):
+        """
+        Backward-compatible alias for LLM validation.
+        """
+        cls.validate_llm()
 
 # 创建一个全局实例，方便导入
 config = Config()

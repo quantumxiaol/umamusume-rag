@@ -11,10 +11,10 @@ import argparse
 import contextlib
 import sys
 from collections.abc import AsyncIterator
+from typing import Any
 
 import uvicorn
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from mcp.server import FastMCP, Server
 from mcp.server.sse import SseServerTransport
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -26,20 +26,37 @@ from starlette.types import Receive, Scope, Send
 from ..rag import initialize_rag, rag_manager
 from ..config import config
 
-config.validate()
+llm = None
 
-llm = ChatOpenAI(
-    model_name=config.INFO_LLM_MODEL_NAME,
-    api_key=config.INFO_LLM_MODEL_API_KEY or config.DASHSCOPE_API_KEY,
-    base_url=config.INFO_LLM_MODEL_BASE_URL,
-)
 
-# 初始化RAG系统
-print("正在初始化RAG系统...")
-initialize_rag(mode="auto", force_rebuild=False)
+def _build_llm() -> Any:
+    try:
+        from langchain_openai import ChatOpenAI
+    except ImportError as exc:
+        raise RuntimeError(
+            "LLM dependencies are not installed. Run: uv sync --extra llm"
+        ) from exc
 
-if rag_manager.vectorstore is None:
-    raise RuntimeError("RAG 初始化失败，未找到向量数据库。请检查文档目录和配置。")
+    config.validate_llm()
+    return ChatOpenAI(
+        model_name=config.INFO_LLM_MODEL_NAME,
+        api_key=config.INFO_LLM_MODEL_API_KEY,
+        base_url=config.INFO_LLM_MODEL_BASE_URL,
+    )
+
+
+def _get_llm() -> Any:
+    global llm
+    if llm is None:
+        llm = _build_llm()
+    return llm
+
+
+def _ensure_rag_initialized(force_rebuild: bool = False) -> None:
+    if force_rebuild or rag_manager.vectorstore is None:
+        initialize_rag(mode="auto", force_rebuild=force_rebuild)
+    if rag_manager.vectorstore is None:
+        raise RuntimeError("RAG 初始化失败，未找到向量数据库。请检查文档目录和配置。")
 
 def _build_prompt() -> ChatPromptTemplate:
     return ChatPromptTemplate.from_messages(
@@ -61,6 +78,7 @@ def _build_prompt() -> ChatPromptTemplate:
 
 
 def _retrieve_documents(query: str, k: int = 4, max_snippet_chars: int = 500):
+    _ensure_rag_initialized()
     docs_with_scores = rag_manager.search_with_scores(query, k=k)
     documents = []
     for doc, score in docs_with_scores:
@@ -141,7 +159,7 @@ async def rag(
         messages = prompt_template.format_messages(
             context=context_text, question=user_question
         )
-        completion = llm.invoke(messages)
+        completion = _get_llm().invoke(messages)
         answer_text = (
             completion.content if hasattr(completion, "content") else str(completion)
         )
@@ -170,7 +188,7 @@ async def rag(
 """)
 async def search_documents(query: str, k: int = 3):
     try:
-        # 使用RAG管理器进行搜索
+        _ensure_rag_initialized()
         results = rag_manager.search(query, k=k)
         
         search_results = []
@@ -203,9 +221,7 @@ async def search_documents(query: str, k: int = 3):
 """)
 async def reload_rag(force_rebuild: bool = True):
     try:
-        initialize_rag(mode="auto", force_rebuild=force_rebuild)
-        if rag_manager.vectorstore is None:
-            return {"status": "error", "message": "RAG 初始化失败，向量数据库为空"}
+        _ensure_rag_initialized(force_rebuild=force_rebuild)
         return {
             "status": "success",
             "message": "RAG系统已重新加载"
@@ -247,6 +263,7 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         """Context manager for session manager."""
         async with session_manager.run():
+            _ensure_rag_initialized()
             print("Application started with StreamableHTTP session manager!")
             try:
                 yield

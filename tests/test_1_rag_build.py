@@ -24,7 +24,13 @@ class TestRAGBuild:
         
         assert rag.rag_directory.exists()
         assert rag.cache_file.parent.exists()
-        assert rag.pdf_processor is not None
+        assert rag.pdf_processor is not None or rag.pdf_processor_engine in {
+            "",
+            "none",
+            "off",
+            "disabled",
+            "false",
+        }
         
         print(f"✓ RAG 目录: {rag.rag_directory}")
         print(f"✓ 缓存文件路径: {rag.cache_file}")
@@ -117,4 +123,3 @@ class TestRAGBuild:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
-

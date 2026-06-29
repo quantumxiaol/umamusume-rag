@@ -1,3 +1,13 @@
+---
+title: Umamusume RAG
+emoji: 🐎
+colorFrom: pink
+colorTo: blue
+sdk: docker
+app_port: 7860
+short_description: RAG Umamusume roleplay chat.
+---
+
 # umamusume-rag - RAG 知识库工具集
 
 一个专注本地知识库检索（RAG）的项目：支持 PDF 转 Markdown、向量化构建与问答服务（HTTP + MCP）。
@@ -31,11 +41,23 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 uv sync
 ```
 
-可选依赖（按需安装）：
+可选依赖（按需安装）。基础安装只包含本地向量库构建/检索；服务、LLM、PDF 处理都拆成可选层：
 
 ```bash
-# PDF/文档解析能力（MarkItDown/Docling/MinerU/Qwen-VL）
-uv sync --extra etl
+# HTTP / MCP 服务
+uv sync --extra server
+
+# LLM 问答（/ask、MCP rag、后续 query expansion）
+uv sync --extra llm
+
+# PDF/文档解析能力（按需选择一个或多个）
+uv sync --extra pdf-markitdown
+uv sync --extra pdf-docling
+uv sync --extra pdf-mineru
+uv sync --extra pdf-qwen-vl
+
+# 全部 PDF 引擎
+uv sync --extra pdf
 
 # 开发与测试工具
 uv sync --extra dev
@@ -53,33 +75,27 @@ uv lock
 cp .env.template .env
 ```
 
-编辑 `.env`（至少配置 LLM API Key）：
+编辑 `.env`。只做 `/search` 或本地向量检索时不需要 LLM API Key：
 
 ```env
-INFO_LLM_MODEL_NAME=qwen-max-latest
-INFO_LLM_MODEL_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-INFO_LLM_MODEL_API_KEY=your_api_key_here
-
 RAG_DIRECTORY=./resources/docs
 HF_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
+EMBEDDING_DEVICE=cpu
 CHUNK_SIZE=500
 CHUNK_OVERLAP=100
-EMBEDDING_DEVICE=cpu
 
 HF_HOME=./models
 HUGGINGFACE_HUB_CACHE=./models/hub
 
-MINERU_MODEL_DIR=./models/hub
-AUTO_CONVERT_PDF_TO_MD=true
+# 仅 /ask / MCP rag 需要
+INFO_LLM_MODEL_NAME=qwen-max-latest
+INFO_LLM_MODEL_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+INFO_LLM_MODEL_API_KEY=your_api_key_here
+
+# 默认禁用 PDF 处理；如需处理 PDF 再改成 markitdown/mineru/docling/qwen-vl
+PDF_PROCESSOR_ENGINE=none
+AUTO_CONVERT_PDF_TO_MD=false
 PREFER_MARKDOWN_FILES=true
-
-PDF_PROCESSOR_ENGINE=mineru
-
-QWEN_VL_MODEL_DIR=./models/Qwen2.5-VL-7B-Instruct
-QWEN_VL_REPO_ID=Qwen/Qwen2.5-VL-7B-Instruct
-QWEN_VL_DEVICE=auto
-QWEN_VL_DTYPE=auto
-QWEN_VL_MAX_TOKENS=2048
 ```
 
 ### 准备知识库
@@ -90,6 +106,11 @@ QWEN_VL_MAX_TOKENS=2048
 python rag_tools.py scan
 python rag_tools.py convert
 python rag_tools.py build
+
+# 导出可上传到 Hugging Face Dataset 的 FAISS 索引
+python rag_tools.py export-faiss --output resources/faiss
+# 兼容 flag 写法
+python rag_tools.py --export-faiss --output resources/faiss
 ```
 
 使用 `rag_tools.py` 的常见流程（选择引擎/查看状态/构建/强制重建）：
@@ -136,9 +157,11 @@ print(md_path)
 选择 PDF 处理引擎（MinerU/MarkItDown/Qwen-VL）：
 
 ```env
-PDF_PROCESSOR_ENGINE=mineru
-# PDF_PROCESSOR_ENGINE=markitdown
+PDF_PROCESSOR_ENGINE=markitdown
+# PDF_PROCESSOR_ENGINE=mineru
+# PDF_PROCESSOR_ENGINE=docling
 # PDF_PROCESSOR_ENGINE=qwen-vl
+AUTO_CONVERT_PDF_TO_MD=true
 ```
 
 PDF 处理说明：
@@ -166,6 +189,7 @@ print(markdown)
 #### 1) HTTP RAG 服务
 
 ```bash
+uv sync --extra server
 python main.py
 ```
 
@@ -183,6 +207,12 @@ curl -X POST http://127.0.0.1:7777/ask \
   -d '{"question":"你的问题","top_k":4,"max_context_chars":2000}'
 ```
 
+`/ask` 还需要安装 LLM extra 并配置 API Key：
+
+```bash
+uv sync --extra llm
+```
+
 FastAPI 接口测试（脚本）：
 
 ```bash
@@ -194,6 +224,7 @@ python tests/test_2_rag_fastapi.py --skip-ask
 #### 2) MCP RAG 服务
 
 ```bash
+uv sync --extra server --extra llm
 python -m umamusume_rag.server.rag_mcp --http -p 7778
 ```
 

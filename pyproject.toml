@@ -8,61 +8,86 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 
-# === Base Dependencies (核心层：算力 + RAG 逻辑) ===
-# 现在的 Base = Web服务 + 向量库 + PyTorch/Transformers 本地算力
 dependencies = [
-    # 1. Web & Protocol
-    "fastapi>=0.115.12",
-    "uvicorn>=0.34.2",
-    "mcp>=1.10.1",
-    "mcp-server>=0.1.4",
+    # Core RAG: local vector index + embedding runtime.
     "python-dotenv>=1.0.1",
-    "pydantic>=2.7.2",
-    "httplib2",
-
-    # 2. RAG Logic (LangChain)
     "langchain>=0.3.25",
     "langchain-core>=0.3.59",
     "langchain-community>=0.3.24",
     "langchain-text-splitters>=0.3.0",
-    "langchain-mcp-adapters>=0.1.8",
-    
-    # 3. Vector Database
-    # 既然是 GPU 环境，数据量大时推荐 faiss-gpu，但 faiss-cpu 兼容性更好且通常够用
-    # 如果你确定显存够用且追求极致检索速度，可以改为 "faiss-gpu"
-    "faiss-cpu==1.11.0", 
-
-    # 4. Local Compute Core (默认集成)
-    # 任何安装此包的人，都具备跑本地 Embedding 的能力
-    "torch==2.7.1", 
+    "faiss-cpu==1.11.0",
+    "torch==2.7.1",
     "transformers>=4.44.0",
     "sentence-transformers==5.0.0",
-    "langchain-huggingface>=0.1.2", # 专门用于加载本地模型的 LangChain 适配器
+    "langchain-huggingface>=0.1.2",
     "huggingface-hub>=0.24.0",
-    "accelerate>=0.26.0", # 既然用 GPU，这个库常用于优化加载
+    "accelerate>=0.26.0",
 ]
 
 [project.optional-dependencies]
 
-# === ETL Layer (解析层) ===
-# 负责把 PDF/Office 变成 Markdown。
+# HTTP/MCP service layer.
+server = [
+    "fastapi>=0.115.12",
+    "uvicorn>=0.34.2",
+    "mcp>=1.10.1",
+    "mcp-server>=0.1.4",
+    "pydantic>=2.7.2",
+    "langchain-mcp-adapters>=0.1.8",
+]
+
+# LLM answer generation / query expansion.
+llm = [
+    "langchain-openai>=0.3.0",
+]
+
+# PDF/document conversion engines. Install only the engines you actually use.
+pdf-markitdown = [
+    "markitdown",
+]
+pdf-docling = [
+    "docling>=2.69.1",
+]
+pdf-mineru = [
+    "mineru[core]>=2.6.2",
+]
+pdf-qwen-vl = [
+    "pymupdf>=1.24.0",
+    "qwen-vl-utils>=0.0.14",
+    "pillow>=10.4.0",
+]
+pdf = [
+    "markitdown",
+    "docling>=2.69.1",
+    "mineru[core]>=2.6.2",
+    "pymupdf>=1.24.0",
+    "qwen-vl-utils>=0.0.14",
+    "pillow>=10.4.0",
+]
+
+# Backward-compatible alias for the old PDF/ETL extra.
 etl = [
     "markitdown",
     "docling>=2.69.1",
     "mineru[core]>=2.6.2",
     "pymupdf>=1.24.0",
-    "qwen-vl-utils>=0.0.14", # 视觉解析工具
+    "qwen-vl-utils>=0.0.14",
     "pillow>=10.4.0",
 ]
 
-# === Dev Tools ===
 dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=0.21.0",
 ]
 
-# === All (全功能开发环境) ===
 all = [
+    "fastapi>=0.115.12",
+    "uvicorn>=0.34.2",
+    "mcp>=1.10.1",
+    "mcp-server>=0.1.4",
+    "pydantic>=2.7.2",
+    "langchain-mcp-adapters>=0.1.8",
+    "langchain-openai>=0.3.0",
     "markitdown",
     "docling>=2.69.1",
     "mineru[core]>=2.6.2",

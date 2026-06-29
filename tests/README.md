@@ -21,23 +21,23 @@ python tests/test_1_rag_build.py
 python -m umamusume_rag.server.rag_mcp --http -p 7778
 
 # 方式 1: 运行 pytest 测试
-pytest tests/test_2_rag_mcp.py -v -s
+pytest tests/test_3_rag_mcp.py -v -s
 
 # 方式 2: 列出可用工具
-python tests/test_2_rag_mcp.py
+python tests/test_3_rag_mcp.py
 
 # 方式 3: 直接调用工具
-python tests/test_2_rag_mcp.py \
+python tests/test_3_rag_mcp.py \
     --tool-name rag \
     --tool-arg "question=这个文档主要讲什么？"
 
-python tests/test_2_rag_mcp.py \
+python tests/test_3_rag_mcp.py \
     --tool-name search_documents \
     --tool-arg "query=测试查询" \
     --tool-arg "k=3"
 
 # 方式 4: 直接使用 rag 工具
-python tests/test_2_rag_mcp.py \
+python tests/test_3_rag_mcp.py \
     -q "请告诉我文档中的主要内容"
 ```
 

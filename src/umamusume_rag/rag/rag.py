@@ -25,11 +25,14 @@ from .download_models import ensure_models_downloaded
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+_DISABLED_PDF_ENGINES = {"", "none", "off", "disabled", "false"}
+
+
 class RAGManager:
     """
     通用RAG管理器
     支持多种文档格式：PDF、Markdown、CSV、TXT
-    支持多种PDF处理引擎：MinerU(默认)、pdfplumber、marker-pdf、unstructured
+    支持多种PDF处理引擎：none、MinerU、MarkItDown、Docling、Qwen-VL
     """
     
     def __init__(self, rag_directory: Optional[str] = None, pdf_processor_engine: Optional[str] = None):
@@ -53,29 +56,27 @@ class RAGManager:
         self.vectorstore = None
         self.config = self._load_config()
         
-        self.pdf_processor_engine = pdf_processor_engine or config.PDF_PROCESSOR_ENGINE
-        # 初始化PDF处理器
-        try:
-            if self.pdf_processor_engine == "mineru":
-                ensure_models_downloaded(config.MINERU_MODEL_DIR)
-            self.pdf_processor = get_pdf_processor(
-                engine=self.pdf_processor_engine,
-                model_dir=config.MINERU_MODEL_DIR,
-            )
-            logger.info(
-                "PDF processor initialized (engine=%s, model_dir=%s)",
-                self.pdf_processor_engine,
-                config.MINERU_MODEL_DIR,
-            )
-        except Exception as e:
-            logger.warning(f"Failed to initialize PDF processor: {e}", exc_info=True)
-            self.pdf_processor = None
-        
+        self.pdf_processor_engine = (
+            pdf_processor_engine
+            if pdf_processor_engine is not None
+            else config.PDF_PROCESSOR_ENGINE
+        ).strip().lower()
+        self.pdf_processor = None
+        self._initialize_pdf_processor()
+
         logger.info(f"RAG Manager initialized with directory: {self.rag_directory}")
-        logger.info(
-            "PDF processing: Using %s for PDF to Markdown conversion",
-            self.pdf_processor_engine,
-        )
+        if self.pdf_processor:
+            logger.info(
+                "PDF processing: using %s for PDF to Markdown conversion",
+                self.pdf_processor_engine,
+            )
+        elif self._pdf_processing_disabled():
+            logger.info("PDF processing: disabled")
+        else:
+            logger.info(
+                "PDF processing: unavailable for engine=%s",
+                self.pdf_processor_engine,
+            )
         
     def _load_config(self) -> Dict[str, Any]:
         """加载配置"""
@@ -85,16 +86,39 @@ class RAGManager:
             'hf_embedding_model': os.getenv('HF_EMBEDDING_MODEL', 'Qwen/Qwen3-Embedding-0.6B'),
             'device': os.getenv('EMBEDDING_DEVICE', 'cpu')
         }
+
+    def _pdf_processing_disabled(self) -> bool:
+        return self.pdf_processor_engine in _DISABLED_PDF_ENGINES
+
+    def _initialize_pdf_processor(self) -> None:
+        if self.pdf_processor or self._pdf_processing_disabled():
+            return
+
+        try:
+            if self.pdf_processor_engine == "mineru":
+                ensure_models_downloaded(config.MINERU_MODEL_DIR)
+            self.pdf_processor = get_pdf_processor(
+                engine=self.pdf_processor_engine,
+                model_dir=config.MINERU_MODEL_DIR,
+            )
+            if self.pdf_processor:
+                logger.info(
+                    "PDF processor initialized (engine=%s, model_dir=%s)",
+                    self.pdf_processor_engine,
+                    config.MINERU_MODEL_DIR,
+                )
+        except Exception as e:
+            logger.warning(f"Failed to initialize PDF processor: {e}", exc_info=True)
+            self.pdf_processor = None
     
     
     def _load_pdf_with_mineru(self, pdf_path: Path) -> List[Document]:
-        """使用MinerU将PDF转换为Markdown后加载"""
+        """使用配置的PDF处理器将PDF转换为Markdown后加载"""
         if not self.pdf_processor:
-            logger.error("MinerU PDF processor not available")
+            logger.error("PDF processor not available")
             return []
         
         try:
-            # 使用MinerU将PDF转换为Markdown
             md_path = self.pdf_processor.process_pdf_to_markdown(str(pdf_path))
             if md_path and Path(md_path).exists():
                 # 加载生成的Markdown文件
@@ -104,7 +128,7 @@ class RAGManager:
                 logger.warning(f"Failed to convert PDF to Markdown: {pdf_path}")
                 return []
         except Exception as e:
-            logger.error(f"MinerU failed to process {pdf_path}: {e}")
+            logger.error(f"PDF processor failed to process {pdf_path}: {e}")
             return []
     
     def _has_corresponding_md(self, pdf_path: Path) -> bool:
@@ -153,7 +177,7 @@ class RAGManager:
                 logger.info(f"PDF converted to Markdown, loading {md_path}")
                 return self.load_single_md(str(md_path))
         
-        # 使用MinerU转换PDF
+        # 使用配置的PDF处理器转换PDF
         return self._load_pdf_with_mineru(pdf_path)
     
     def load_single_md(self, md_path: str) -> List[Document]:
@@ -490,25 +514,11 @@ class RAGManager:
         import time
         start_time = time.time()
         
-        # 如果处理器未初始化，尝试初始化
         if not self.pdf_processor:
-            try:
-                if self.pdf_processor_engine == "mineru":
-                    ensure_models_downloaded(config.MINERU_MODEL_DIR)
-                self.pdf_processor = get_pdf_processor(
-                    engine=self.pdf_processor_engine,
-                    model_dir=config.MINERU_MODEL_DIR,
-                )
-                logger.info(
-                    "PDF processor initialized (engine=%s, model_dir=%s)",
-                    self.pdf_processor_engine,
-                    config.MINERU_MODEL_DIR,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to initialize PDF processor: {e}", exc_info=True)
+            self._initialize_pdf_processor()
         
         if not self.pdf_processor:
-            logger.warning("MinerU PDF processor not available, cannot convert PDFs")
+            logger.warning("PDF processor not available, cannot convert PDFs")
             return {
                 "converted": [],
                 "skipped": [],
@@ -595,18 +605,10 @@ class RAGManager:
             Markdown文件路径，失败返回None
         """
         if not self.pdf_processor:
-            try:
-                if self.pdf_processor_engine == "mineru":
-                    ensure_models_downloaded(config.MINERU_MODEL_DIR)
-                self.pdf_processor = get_pdf_processor(
-                    engine=self.pdf_processor_engine,
-                    model_dir=config.MINERU_MODEL_DIR,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to initialize PDF processor: {e}", exc_info=True)
+            self._initialize_pdf_processor()
 
         if not self.pdf_processor:
-            logger.warning("MinerU PDF processor not available, cannot convert PDF")
+            logger.warning("PDF processor not available, cannot convert PDF")
             return None
 
         pdf_path_obj = Path(pdf_path)

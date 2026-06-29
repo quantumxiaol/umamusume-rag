@@ -5,14 +5,14 @@
 
 使用方法：
     # 列出工具
-    python tests/test_2_rag_mcp.py
+    python tests/test_3_rag_mcp.py
     
     # 直接调用工具
-    python tests/test_2_rag_mcp.py --tool-name rag --tool-arg "question=这个文档主要讲什么？"
-    python tests/test_2_rag_mcp.py --tool-name search_documents --tool-arg "query=测试" --tool-arg "k=3"
+    python tests/test_3_rag_mcp.py --tool-name rag --tool-arg "question=这个文档主要讲什么？"
+    python tests/test_3_rag_mcp.py --tool-name search_documents --tool-arg "query=测试" --tool-arg "k=3"
     
     # 直接调用 rag 工具
-    python tests/test_2_rag_mcp.py -q "请告诉我文档中的主要内容"
+    python tests/test_3_rag_mcp.py -q "请告诉我文档中的主要内容"
 """
 
 import sys
