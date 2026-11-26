@@ -39,6 +39,24 @@ def test_grep_search_returns_literal_matches(tmp_path):
     assert "トレーナー" in result["results"][0]["context"]
 
 
+@pytest.mark.parametrize(
+    ("max_results", "submatches_per_result", "truncated"),
+    [(2, [2, 1], False), (1, [2], True), (0, [], True)],
+)
+def test_grep_search_truncation_counts_submatches(
+    tmp_path, max_results, submatches_per_result, truncated
+):
+    (tmp_path / "story.md").write_text("tea tea\ntea\n", encoding="utf-8")
+    searcher = RipgrepSearcher(root=tmp_path)
+
+    result = searcher.search("tea", max_results=max_results, context_lines=0)
+
+    assert result["match_count"] == 3
+    assert result["returned_count"] == len(submatches_per_result)
+    assert [len(row["submatches"]) for row in result["results"]] == submatches_per_result
+    assert result["truncated"] is truncated
+
+
 def test_grep_search_uses_fixed_strings_not_regex(tmp_path):
     (tmp_path / "regex.md").write_text(
         "abc.* should match literally\n"

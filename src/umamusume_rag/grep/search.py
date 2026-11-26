@@ -120,6 +120,7 @@ class RipgrepSearcher:
             max_results=max_results,
             context_lines=context_lines,
         )
+        returned_matches = sum(len(result.submatches) for result in results)
         return {
             "status": "success",
             "query": query,
@@ -129,7 +130,7 @@ class RipgrepSearcher:
             "match_count": total_matches,
             "returned_count": len(results),
             "files_with_matches": files_with_matches,
-            "truncated": total_matches > len(results),
+            "truncated": total_matches > returned_matches,
             "elapsed_seconds": round(time.monotonic() - started_at, 4),
             "results": [result.to_dict() for result in results],
         }
